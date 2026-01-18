@@ -198,11 +198,10 @@
   4. **CoinbaseSmartWallet**: Any valid `to` address when none of above match (trusted because tx is confirmed on-chain)
 - **Security**: Transaction uniqueness still enforced via duplicate hash check in database.
 
-## [2026-01-18] Sponsored Gas Verification Fix
-- **Fix**: Implemented permissive verification for ZERO-VALUE transactions (free mints).
-- **Rationale**: When Base pays gas (Sponsored Transactions), the `receipt.to` field often points to a Relayer or Paymaster instead of the Admin Wallet or EntryPoint.
-- **Logic**: If `value === 0` AND transaction is confirmed on-chain, we TRUST it regardless of the recipient address. This enables free mints to work seamlessly even with complex gas sponsorship flows.
-- **Security**: Strict validation remains for paid transactions. For free items, unique `txHash` check prevents replays.
+## [2026-01-18] Reference Repo Synchronization
+- **Fix**: Synchronized `verify-transaction` and `ShopModal` with the working code from `Kalem231/basebird_miniapp_for_baseapp`.
+- **Logic**: Restored strict verification logic that matches the reference implementation (using EntryPoints v0.6/0.7, AdminWallet, and SelfProxy checks).
+- **Status**: Codebase now mirrors the version confirmed to be working perfectly.
 
 ## [2026-01-18] Fix Base App Avatar
 - **Feature**: Added meaningful user avatar display for Base App users.

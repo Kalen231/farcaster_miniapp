@@ -113,25 +113,7 @@ export default function ShopModal({
             setError(null);
             setCallId(null);
 
-            // FREE BIRD: Skip blockchain tx (Blockaid blocks zero-value transfers)
-            // Claim directly through API
-            if (isMintable && parseFloat(priceInEth) === 0) {
-                console.log('🆓 Free bird claim - skipping blockchain tx');
-                const response = await fetch('/api/claim-free-bird', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ fid, skuId })
-                });
-
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.error || 'Failed to claim free bird');
-                }
-
-                return { method: 'free', success: true, skuId };
-            }
-
-            const value = parseEther(priceInEth);
+            const value = isMintable ? parseEther("0") : parseEther(priceInEth);
 
             // BRANCH: Base App (sendCalls) vs Standard (sendTransaction)
             if (isBaseApp) {
