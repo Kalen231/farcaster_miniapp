@@ -179,7 +179,8 @@ export default function AchievementsModal({
 
     const handleShare = async (achievementId: string) => {
         setSharingId(achievementId);
-        const baseUrl = process.env.NEXT_PUBLIC_URL || "https://basebird.space";
+        const rawUrl = process.env.NEXT_PUBLIC_URL || "https://basebird.space";
+        const baseUrl = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
         const text = "Check out Base Bird! 🦅";
 
         try {

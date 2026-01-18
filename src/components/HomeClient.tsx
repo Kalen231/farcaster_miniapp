@@ -92,7 +92,8 @@ export default function HomeClient() {
 
     const handleShare = useCallback(async () => {
         const text = `My record ${currentScore} in BaseBird! Can you beat it?`;
-        const baseUrl = process.env.NEXT_PUBLIC_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+        const rawUrl = process.env.NEXT_PUBLIC_URL || (typeof window !== 'undefined' ? window.location.origin : 'https://basebird.space');
+        const baseUrl = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
 
         try {
             // Use composeCast for recast tracking
