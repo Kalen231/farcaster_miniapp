@@ -1,13 +1,64 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { SKINS } from '@/config/skins';
-import { createPublicClient, http, parseEther } from "viem";
+import { createPublicClient, http, parseEther, decodeAbiParameters, Hex } from "viem";
 import { base } from "viem/chains";
 
 const publicClient = createPublicClient({
     chain: base,
     transport: http(),
 });
+
+// EntryPoint contract addresses for ERC-4337
+const ENTRY_POINT_V06 = "0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789";
+const ENTRY_POINT_V07 = "0x0000000071727de22e5e9d8baf0edac6f37da032";
+
+// Smart Wallet execute() function selector
+const EXECUTE_SELECTOR = "0xb61d27f6"; // execute(address,uint256,bytes)
+
+/**
+ * Extract value from Smart Wallet execute() calldata
+ * Smart Wallets use execute(address dest, uint256 value, bytes data)
+ */
+function extractValueFromExecuteCalldata(input: Hex, adminWallet: string): bigint | null {
+    try {
+        // Check if this is an execute() call
+        if (!input.startsWith(EXECUTE_SELECTOR)) {
+            console.log('[Verify] Not an execute() call, selector:', input.slice(0, 10));
+            return null;
+        }
+
+        // Decode execute(address, uint256, bytes) parameters
+        // Skip first 4 bytes (function selector)
+        const params = input.slice(10) as Hex;
+
+        const [dest, value] = decodeAbiParameters(
+            [
+                { name: 'dest', type: 'address' },
+                { name: 'value', type: 'uint256' },
+                { name: 'data', type: 'bytes' }
+            ],
+            `0x${params}`
+        );
+
+        console.log('[Verify] Decoded execute():', {
+            dest: dest,
+            value: value.toString(),
+            destMatchesAdmin: dest.toLowerCase() === adminWallet.toLowerCase()
+        });
+
+        // Verify destination is our admin wallet
+        if (dest.toLowerCase() === adminWallet.toLowerCase()) {
+            return value;
+        }
+
+        console.log('[Verify] Destination does not match admin wallet');
+        return null;
+    } catch (e) {
+        console.log('[Verify] Failed to decode execute() calldata:', e);
+        return null;
+    }
+}
 
 export async function POST(req: NextRequest) {
     try {
@@ -55,36 +106,57 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        // 3. Loose Verification (Logging only)
-        // We do not block on these checks because Base App / Smart Wallets behavior is complex 
-        // and has caused false negatives (money lost, item not delivered).
-        const adminWallet = process.env.NEXT_PUBLIC_ADMIN_WALLET?.toLowerCase();
+        // 3. Get transaction details and skin price
+        const adminWallet = process.env.NEXT_PUBLIC_ADMIN_WALLET || '';
+        const skin = SKINS.find(sk => sk.skuId === skuId);
+        const requiredPrice = skin ? parseEther(skin.price.toString()) : BigInt(0);
+        const isMintable = skin?.isMintable || false;
+
+        console.log(`[Verify] SKU: ${skuId}, Price: ${requiredPrice}, Mintable: ${isMintable}`);
+
+        const tx = await publicClient.getTransaction({ hash: txHash as `0x${string}` });
         const to = receipt.to?.toLowerCase();
 
-        console.log(`[Verify] Debug Info:`, {
-            admin: adminWallet,
+        console.log(`[Verify] TX Details:`, {
             to: to,
-            from: receipt.from, // Smart Account
-            block: receipt.blockNumber
+            from: receipt.from,
+            txValue: tx.value.toString(),
+            inputLength: tx.input?.length || 0
         });
 
-        // Optional: Value check (Informational)
-        try {
-            const tx = await publicClient.getTransaction({ hash: txHash as `0x${string}` });
-            const s = SKINS.find(sk => sk.skuId === skuId);
-            const price = s ? parseEther(s.price.toString()) : BigInt(0);
+        // 4. Determine actual value transferred
+        let actualValue = tx.value; // Default: top-level value
 
-            console.log(`[Verify] Value Check: Sent ${tx.value}, Price ${price}`);
+        // Check if this is a Smart Wallet transaction (goes to EntryPoint)
+        const isSmartWalletTx = to === ENTRY_POINT_V06.toLowerCase() ||
+            to === ENTRY_POINT_V07.toLowerCase();
 
-            if (tx.value < price) {
-                console.warn("⚠️ Potential Payment Issue: Transaction value < Price. (Could be internal Smart Wallet transfer)");
-                // We ALLOW this because previous strict checks failed valid user payments.
+        if (isSmartWalletTx && tx.input) {
+            console.log('[Verify] Smart Wallet transaction detected, parsing calldata...');
+
+            // Try to extract value from execute() calldata
+            const internalValue = extractValueFromExecuteCalldata(tx.input as Hex, adminWallet);
+
+            if (internalValue !== null) {
+                actualValue = internalValue;
+                console.log(`[Verify] Extracted internal value: ${actualValue}`);
+            } else {
+                console.log('[Verify] Could not extract internal value, using tx.value');
             }
-        } catch (e) {
-            console.warn("Could not fetch tx value details", e);
         }
 
-        // 4. Record purchase
+        // 5. Verify payment amount
+        console.log(`[Verify] Payment Check: Actual=${actualValue}, Required=${requiredPrice}`);
+
+        if (!isMintable && actualValue < requiredPrice) {
+            console.error(`[Verify] ❌ INSUFFICIENT PAYMENT: Sent ${actualValue}, Required ${requiredPrice}`);
+            return NextResponse.json(
+                { error: `Insufficient payment: sent ${actualValue}, required ${requiredPrice}` },
+                { status: 400 }
+            );
+        }
+
+        // 6. Record purchase
         const { error: insertError } = await supabase.from("purchases").insert({
             fid,
             tx_hash: txHash,
@@ -110,3 +182,4 @@ export async function POST(req: NextRequest) {
         );
     }
 }
+
