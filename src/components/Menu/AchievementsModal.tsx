@@ -134,11 +134,16 @@ export default function AchievementsModal({
             // Base App Branch
             if (isBaseApp) {
                 console.log('🔵 Using wallet_sendCalls for Achievement Mint');
+                // Use minimal value to ensure real on-chain tx
+                const mintValue = BigInt(1);
+                console.log(`💰 Mint Value (wei): ${mintValue.toString()}`);
+                console.log(`📍 To: ${adminWallet}`);
+
                 const id = await sendCallsAsync({
                     calls: [{
                         to: adminWallet as `0x${string}`,
-                        value: parseEther('0'),
-                        data: '0x'
+                        value: mintValue,
+                        data: '0x' as `0x${string}`
                     }]
                 });
                 console.log('✅ Calls sent, ID:', id);

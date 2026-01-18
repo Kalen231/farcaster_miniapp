@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026-01-19] 🚨 CRITICAL: Smart Wallet (ERC-4337) Transaction Verification
+> **Важнейшее обновление для Base App поддержки**
+
+- **Проблема**: Транзакции в Base App (Smart Wallet) не проходили верификацию, потому что `to` адрес в receipt был **не** admin wallet, а EntryPoint контракт.
+- **Root Cause**: Smart Wallets (Coinbase) используют ERC-4337 архитектуру, где транзакции проходят через EntryPoint контракты.
+- **Решение в `verify-transaction/route.ts`**:
+  - Добавлены в whitelist EntryPoint v0.6 (`0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789`)
+  - Добавлены в whitelist EntryPoint v0.7 (`0x0000000071727de22e5e9d8baf0edac6f37da032`)
+  - Поддержка self-proxy паттерна (`to === from`)
+- **Документация**: Обновлён `docs/API_SDK_BASE_APP.txt` с описанием архитектуры верификации.
+- **Результат**: Проект полностью совместим с Coinbase Smart Wallet в Base App! 🔵🦅
+
+
 ## [2026-01-16] Farcaster Mini App SDK Migration
 - **SDK**: Migrated from `@farcaster/frame-sdk` (deprecated) to `@farcaster/miniapp-sdk` (current).
 - **Wagmi**: Updated connector from `injected()` to `@farcaster/miniapp-wagmi-connector` for proper Farcaster wallet integration.

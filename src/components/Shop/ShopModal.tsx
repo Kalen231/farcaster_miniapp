@@ -138,23 +138,32 @@ export default function ShopModal({
             setError(null);
             setCallId(null);
 
-            const value = isMintable ? parseEther("0") : parseEther(priceInEth);
+            // For free mints, use smallest non-zero value
+            // For paid, use parseEther
+            const value = isMintable ? BigInt(1) : parseEther(priceInEth);
 
             // BRANCH: Base App (sendCalls) vs Standard (sendTransaction)
             if (isBaseApp) {
                 console.log('🔵 Using wallet_sendCalls for Base App');
-                console.log(`💰 Sending Value: ${value.toString()} wei`);
+                console.log(`💰 Value (wei): ${value.toString()}`);
+                console.log(`💰 Value (hex): 0x${value.toString(16)}`);
+                console.log(`📍 To: ${adminWallet}`);
 
-                // CRITICAL: Pass BigInt directly, NOT hex string!
-                // Wagmi/EIP-5792 converts BigInt to hex internally.
-                // Passing hex causes double-conversion and transaction failure.
-                const id = await sendCallsAsync({
+                // Use sendCallsAsync from wagmi/experimental 
+                // wagmi internally converts BigInt to hex via viem
+                const callData = {
                     calls: [{
                         to: adminWallet as `0x${string}`,
-                        value: value,  // BigInt, not hex!
-                        data: '0x'
+                        value: value,
+                        data: '0x' as `0x${string}`
                     }]
-                });
+                };
+
+                console.log('📦 Full call data:', JSON.stringify(callData, (_, v) =>
+                    typeof v === 'bigint' ? `${v.toString()} (BigInt)` : v
+                    , 2));
+
+                const id = await sendCallsAsync(callData);
                 console.log('✅ Calls sent, ID:', id);
                 setCallId(id); // Triggers the Effect
                 return { method: 'calls', id, skuId };
