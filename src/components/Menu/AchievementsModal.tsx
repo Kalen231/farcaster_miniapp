@@ -49,13 +49,38 @@ export default function AchievementsModal({
         }
     });
 
-    // Effect to handle Base App validation
+    // Effect to handle Base App validation when call confirms
     useEffect(() => {
-        if (callId && callsStatus?.status === 'CONFIRMED' && mintingId && !isVerifying) {
-            console.log('✅ Base App Mint Call Confirmed:', callId);
+        // CRITICAL: Check for BOTH CONFIRMED status AND actual transactionHash
+        const txHash = callsStatus?.receipts?.[0]?.transactionHash;
+
+        if (callId && callsStatus?.status === 'CONFIRMED' && txHash && mintingId && !isVerifying) {
+            console.log('✅ Base App Mint Call Confirmed with hash:', txHash);
             verifyBaseAppMint(callId, mintingId);
         }
-    }, [callId, callsStatus?.status, mintingId]);
+
+        // Log PENDING status for debugging
+        if (callId && callsStatus?.status === 'PENDING') {
+            console.log('⏳ Base App Mint Pending, waiting for blockchain confirmation...');
+        }
+    }, [callId, callsStatus?.status, callsStatus?.receipts, mintingId]);
+
+    // Timeout for BaseApp mint transactions - show error if no hash after 60 seconds
+    useEffect(() => {
+        if (!callId) return;
+
+        const timeout = setTimeout(() => {
+            const txHash = callsStatus?.receipts?.[0]?.transactionHash;
+            if (callId && !txHash && mintingId) {
+                console.error('❌ BaseApp mint timeout - no hash received after 60s');
+                setError('Mint failed: No confirmation from blockchain. Please try again.');
+                setMintingId(null);
+                setCallId(null);
+            }
+        }, 60000); // 60 seconds
+
+        return () => clearTimeout(timeout);
+    }, [callId, callsStatus?.receipts, mintingId]);
 
     const verifyBaseAppMint = async (id: string, achievementId: string) => {
         setIsVerifying(true);

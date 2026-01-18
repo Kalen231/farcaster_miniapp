@@ -49,13 +49,38 @@ export default function ShopModal({
         }
     });
 
-    // Effect to handle Base App validation when call captures
+    // Effect to handle Base App validation when call confirms
     useEffect(() => {
-        if (callId && callsStatus?.status === 'CONFIRMED' && buyingSkuId && !isVerifying) {
-            console.log('✅ Base App Call Confirmed:', callId);
+        // CRITICAL: Check for BOTH CONFIRMED status AND actual transactionHash
+        const txHash = callsStatus?.receipts?.[0]?.transactionHash;
+
+        if (callId && callsStatus?.status === 'CONFIRMED' && txHash && buyingSkuId && !isVerifying) {
+            console.log('✅ Base App Call Confirmed with hash:', txHash);
             verifyBaseAppPurchase(callId, buyingSkuId);
         }
-    }, [callId, callsStatus?.status, buyingSkuId]);
+
+        // Log PENDING status for debugging
+        if (callId && callsStatus?.status === 'PENDING') {
+            console.log('⏳ Base App Call Pending, waiting for blockchain confirmation...');
+        }
+    }, [callId, callsStatus?.status, callsStatus?.receipts, buyingSkuId]);
+
+    // Timeout for BaseApp transactions - show error if no hash after 60 seconds
+    useEffect(() => {
+        if (!callId) return;
+
+        const timeout = setTimeout(() => {
+            const txHash = callsStatus?.receipts?.[0]?.transactionHash;
+            if (callId && !txHash && buyingSkuId) {
+                console.error('❌ BaseApp transaction timeout - no hash received after 60s');
+                setError('Transaction failed: No confirmation from blockchain. Please try again.');
+                setBuyingSkuId(null);
+                setCallId(null);
+            }
+        }, 60000); // 60 seconds
+
+        return () => clearTimeout(timeout);
+    }, [callId, callsStatus?.receipts, buyingSkuId]);
 
     const verifyBaseAppPurchase = async (id: string, skuId: string) => {
         setIsVerifying(true);
