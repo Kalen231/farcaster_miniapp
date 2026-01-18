@@ -181,3 +181,9 @@
 - **UI**: Updated `MainMenu.tsx` to display 32x32px circular avatar thumbnail with cyan border glow.
 - **Fallback**: Shows emoji placeholder (👤) if avatar URL is not available.
 
+## [2026-01-18] Domain Migration to basebird.space
+- **Domain**: Migrated project from `base-bird.xyz` to `basebird.space`.
+- **Config**: Updated `NEXT_PUBLIC_URL` in `.env.local` to `https://basebird.space`.
+- **Manifest**: Updated `accountAssociation` in Farcaster manifest with new domain credentials (fid: 840807).
+- **Fallbacks**: Updated all fallback domain references in `layout.tsx`, `AchievementsModal.tsx`, and manifest route.
+- **Purpose**: Full Farcaster mini app support with new verified domain.
