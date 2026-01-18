@@ -76,6 +76,25 @@ export function Providers({ children }: { children: React.ReactNode }) {
                         console.log('🔵 Running in Base App!');
                         setIsBaseApp(true);
                     }
+
+                    // Fix: Fetch PFP if missing (common in Base App)
+                    if (ctx?.user?.fid && !ctx.user.pfpUrl) {
+                        try {
+                            const res = await fetch(`/api/user/pfp?fid=${ctx.user.fid}`);
+                            const data = await res.json();
+                            if (data.pfpUrl) {
+                                setContext((prev: any) => ({
+                                    ...prev,
+                                    user: {
+                                        ...prev?.user,
+                                        pfpUrl: data.pfpUrl
+                                    }
+                                }));
+                            }
+                        } catch (e) {
+                            console.error('Failed to fetch PFP fallback', e);
+                        }
+                    }
                 } else {
                     console.log('🎮 Not in Mini App, using dev mode');
                     setIsDevMode(true);

@@ -203,3 +203,9 @@
 - **Debug**: Improved "Invalid recipient" error message to include the actual observed `to` address for debugging.
 - **Logic**: Checking against Admin Wallet, EntryPoints, and Self-Proxy (`to === from`).
 - **Security**: Strict validation ensures transactions are routed correctly while supporting Base App Smart Wallets.
+
+## [2026-01-18] Fix Base App Avatar
+- **Feature**: Added meaningful user avatar display for Base App users.
+- **Fix**: Implemented fallback mechanism to fetch user PFP via public Hub API (`/api/user/pfp`) when the Farcaster context provided by Base App is missing the `pfpUrl`.
+- **Backend**: Added secure API route `src/app/api/user/pfp/route.ts` to proxy the request to Farcaster Hubs.
+- **Providers**: Updated `Providers.tsx` to automatically patch the user context with the fetched PFP.
