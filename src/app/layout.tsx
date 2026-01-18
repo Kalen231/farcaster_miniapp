@@ -29,7 +29,7 @@ export const metadata: Metadata = {
     description: "A Farcaster BaseBird Mini App",
     other: {
         "fc:miniapp": JSON.stringify(miniappEmbed),
-        "base:app_id": "696cee36c0ab25addaaaf42d",
+        "base:app_id": "696cba96f22fe462e74c1327",
     },
 };
 
