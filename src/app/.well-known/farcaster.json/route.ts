@@ -42,7 +42,14 @@ export async function GET(request: NextRequest) {
             ogTitle: "Base Bird - Flap to Earn",
             ogDescription: "Crypto Flappy Bird on Base. Mint bird skins, compete on leaderboards, unlock achievements!",
             ogImageUrl: `${appUrl}/hero_new.png`,
-            webhookUrl: `${appUrl}/api/webhook`
+            webhookUrl: `${appUrl}/api/webhook`,
+            requiredChains: [
+                "eip155:8453"
+            ],
+            requiredCapabilities: [
+                "actions.composeCast",
+                "wallet.getEthereumProvider"
+            ]
         }
     };
 

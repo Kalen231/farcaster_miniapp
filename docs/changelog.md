@@ -198,10 +198,13 @@
   4. **CoinbaseSmartWallet**: Any valid `to` address when none of above match (trusted because tx is confirmed on-chain)
 - **Security**: Transaction uniqueness still enforced via duplicate hash check in database.
 
-## [2026-01-18] Reference Repo Synchronization
-- **Fix**: Synchronized `verify-transaction` and `ShopModal` with the working code from `Kalem231/basebird_miniapp_for_baseapp`.
-- **Logic**: Restored strict verification logic that matches the reference implementation (using EntryPoints v0.6/0.7, AdminWallet, and SelfProxy checks).
-- **Status**: Codebase now mirrors the version confirmed to be working perfectly.
+## [2026-01-18] Optimal Transaction Verification
+- **Core Logic**: Reverted to the strict verification logic from `Kalen231/basebird_miniapp_for_baseapp` (Reference Repo) which is proven to work for Base App Smart Wallets.
+- **Security Fix**: Added explicit transaction VALUE verification.
+  - Fetches the transaction on-chain.
+  - Compares `tx.value` against the skin price in `SKINS` config.
+  - Prevents purchasing paid skins (e.g. 0.02 ETH) for free (0 ETH).
+- **Result**: "Invalid recipient" error resolved by using proven EntryPoint/SelfProxy checks, AND fraud prevented by Value check.
 
 ## [2026-01-18] Fix Base App Avatar
 - **Feature**: Added meaningful user avatar display for Base App users.

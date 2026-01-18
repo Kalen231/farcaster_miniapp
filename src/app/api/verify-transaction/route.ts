@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { createPublicClient, http } from "viem";
+import { SKINS } from '@/config/skins';
+import { createPublicClient, http, parseEther } from "viem";
 import { base } from "viem/chains";
 
 const publicClient = createPublicClient({
@@ -68,6 +69,27 @@ export async function POST(req: NextRequest) {
         }
 
         console.log(`[Verify] Recipient check passed (${isStandardDirect ? 'Direct' : 'SmartWallet'})`);
+
+        // 3. Check Value (Security Fix: Prevent free buying)
+        const skin = SKINS.find(s => s.skuId === skuId);
+        if (!skin) {
+            return NextResponse.json({ error: "Invalid SKU" }, { status: 400 });
+        }
+
+        const tx = await publicClient.getTransaction({
+            hash: txHash as `0x${string}`,
+        });
+
+        const expectedValue = parseEther(skin.price.toString());
+        // Allow tiny margin for floating point? No, ETH integers are exact.
+        if (tx.value < expectedValue) {
+            console.warn(`[Verify] Value mismatch for ${skuId}. Expected ${expectedValue}, got ${tx.value}`);
+            return NextResponse.json(
+                { error: `Insufficient payment: sent ${tx.value}, expected ${expectedValue}` },
+                { status: 400 }
+            );
+        }
+        console.log(`[Verify] Value check passed: ${tx.value} >= ${expectedValue}`);
 
         // 3. Check for duplicate hash
         const { data: existingPurchase, error: fetchError } = await supabase
