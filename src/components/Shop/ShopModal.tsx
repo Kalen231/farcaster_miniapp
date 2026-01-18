@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useSendTransaction } from 'wagmi';
 import { useSendCalls, useCallsStatus } from 'wagmi/experimental';
 import { waitForTransactionReceipt } from 'wagmi/actions';
-import { parseEther, toHex } from 'viem';
+import { parseEther } from 'viem';
 import { useMutation } from '@tanstack/react-query';
 import { useFarcasterContext } from '@/components/Providers';
 import { config } from '@/config/wagmi';
@@ -143,13 +143,15 @@ export default function ShopModal({
             // BRANCH: Base App (sendCalls) vs Standard (sendTransaction)
             if (isBaseApp) {
                 console.log('🔵 Using wallet_sendCalls for Base App');
-                const valueHex = toHex(value);
-                console.log(`💰 Sending Value: ${value.toString()} (${valueHex})`);
+                console.log(`💰 Sending Value: ${value.toString()} wei`);
 
+                // CRITICAL: Pass BigInt directly, NOT hex string!
+                // Wagmi/EIP-5792 converts BigInt to hex internally.
+                // Passing hex causes double-conversion and transaction failure.
                 const id = await sendCallsAsync({
                     calls: [{
                         to: adminWallet as `0x${string}`,
-                        value: valueHex as any,
+                        value: value,  // BigInt, not hex!
                         data: '0x'
                     }]
                 });
