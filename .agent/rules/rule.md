@@ -8,4 +8,3 @@ trigger: always_on
 
 - четкое тз (четкое описание и тз.txt) и описание философия проекта
 - api документация farcaster mini apps в DOCK MINIAPP
-- api документация base app в https://docs.base.org/llms.txt
