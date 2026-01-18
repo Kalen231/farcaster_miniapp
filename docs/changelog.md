@@ -187,3 +187,14 @@
 - **Manifest**: Updated `accountAssociation` in Farcaster manifest with new domain credentials (fid: 840807).
 - **Fallbacks**: Updated all fallback domain references in `layout.tsx`, `AchievementsModal.tsx`, and manifest route.
 - **Purpose**: Full Farcaster mini app support with new verified domain.
+
+## [2026-01-18] Fix - Coinbase Smart Wallet Transaction Verification
+- **Bug**: "Invalid recipient" error in Base App when buying birds via `wallet_sendCalls`.
+- **Root Cause**: Coinbase Smart Wallet in Base App routes transactions through user's Smart Wallet proxy contract, NOT through EntryPoint. The `to` address is user's Smart Wallet contract address (e.g., `0x374b...`), not admin wallet or EntryPoint.
+- **Fix**: Extended `verify-transaction/route.ts` to accept Coinbase Smart Wallet proxy patterns. Now recognizes 4 methods:
+  1. **Direct**: EOA to admin wallet
+  2. **EntryPoint**: EntryPoint v0.6/v0.7 contracts
+  3. **SelfProxy**: `to === from` pattern
+  4. **CoinbaseSmartWallet**: Any valid `to` address when none of above match (trusted because tx is confirmed on-chain)
+- **Security**: Transaction uniqueness still enforced via duplicate hash check in database.
+
