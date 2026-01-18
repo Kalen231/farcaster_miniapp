@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useSendTransaction } from 'wagmi';
 import { useSendCalls, useCallsStatus } from 'wagmi/experimental';
 import { waitForTransactionReceipt } from 'wagmi/actions';
-import { parseEther } from 'viem';
+import { parseEther, toHex } from 'viem';
 import { useMutation } from '@tanstack/react-query';
 import { useFarcasterContext } from '@/components/Providers';
 import { config } from '@/config/wagmi';
@@ -118,10 +118,13 @@ export default function ShopModal({
             // BRANCH: Base App (sendCalls) vs Standard (sendTransaction)
             if (isBaseApp) {
                 console.log('🔵 Using wallet_sendCalls for Base App');
+                const valueHex = toHex(value);
+                console.log(`💰 Sending Value: ${value.toString()} (${valueHex})`);
+
                 const id = await sendCallsAsync({
                     calls: [{
                         to: adminWallet as `0x${string}`,
-                        value: value,
+                        value: valueHex as any,
                         data: '0x'
                     }]
                 });

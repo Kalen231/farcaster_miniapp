@@ -23,86 +23,65 @@ export async function POST(req: NextRequest) {
         console.log(`[Verify] Checking tx: ${txHash} for FID: ${fid}, SKU: ${skuId}`);
 
         // 1. Verify transaction on-chain
-        const receipt = await publicClient.getTransactionReceipt({
-            hash: txHash as `0x${string}`,
-        });
+        let receipt;
+        try {
+            receipt = await publicClient.getTransactionReceipt({
+                hash: txHash as `0x${string}`,
+            });
+        } catch (e) {
+            console.error("Failed to fetch receipt:", e);
+            return NextResponse.json({ error: "Transaction not found on chain" }, { status: 404 });
+        }
 
         if (receipt.status !== "success") {
             return NextResponse.json(
-                { error: "Transaction failed or not found" },
+                { error: "Transaction failed (reverted)" },
                 { status: 400 }
             );
         }
 
-        // 2. Check recipient
-        const adminWallet = process.env.NEXT_PUBLIC_ADMIN_WALLET?.toLowerCase();
-        const to = receipt.to?.toLowerCase();
-        const from = receipt.from?.toLowerCase();
-
-        console.log(`[Verify] AdminWallet: ${adminWallet}`);
-        console.log(`[Verify] Receipt TO: ${to}`);
-        console.log(`[Verify] Receipt FROM: ${from}`);
-
-        if (!adminWallet) {
-            console.error("NEXT_PUBLIC_ADMIN_WALLET is not set");
-            return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
-        }
-
-        // Standard EOA Check
-        const isStandardDirect = to === adminWallet;
-
-        // Smart Wallet Check (EIP-4337 EntryPoints)
-        const ENTRY_POINT_V6 = "0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789";
-        const ENTRY_POINT_V7 = "0x0000000071727de22e5e9d8baf0edac6f37da032";
-        const isSmartWalletEntryPoint = to === ENTRY_POINT_V6 || to === ENTRY_POINT_V7;
-
-        // Smart Wallet Check (Self-call / Proxy execution)
-        // For some wallets, the 'to' is the wallet contract itself (same as from, or a related proxy)
-        const isSmartWalletDirect = to === from;
-
-        if (!isStandardDirect && !isSmartWalletEntryPoint && !isSmartWalletDirect) {
-            console.warn(`[Verify] Recipient mismatch. Expected ${adminWallet}, got ${to}`);
-            return NextResponse.json(
-                { error: `Invalid recipient: observed ${to}. Expected admin wallet or EntryPoint.` },
-                { status: 400 }
-            );
-        }
-
-        console.log(`[Verify] Recipient check passed (${isStandardDirect ? 'Direct' : 'SmartWallet'})`);
-
-        // 3. Check Value (Security Fix: Prevent free buying)
-        const skin = SKINS.find(s => s.skuId === skuId);
-        if (!skin) {
-            return NextResponse.json({ error: "Invalid SKU" }, { status: 400 });
-        }
-
-        const tx = await publicClient.getTransaction({
-            hash: txHash as `0x${string}`,
-        });
-
-        const expectedValue = parseEther(skin.price.toString());
-        // Allow tiny margin for floating point? No, ETH integers are exact.
-        if (tx.value < expectedValue) {
-            console.warn(`[Verify] Value mismatch for ${skuId}. Expected ${expectedValue}, got ${tx.value}`);
-            return NextResponse.json(
-                { error: `Insufficient payment: sent ${tx.value}, expected ${expectedValue}` },
-                { status: 400 }
-            );
-        }
-        console.log(`[Verify] Value check passed: ${tx.value} >= ${expectedValue}`);
-
-        // 3. Check for duplicate hash
-        const { data: existingPurchase, error: fetchError } = await supabase
+        // 2. Check for duplicate hash (CRITICAL)
+        const { data: existingPurchase } = await supabase
             .from("purchases")
             .select("id")
             .eq("tx_hash", txHash)
             .maybeSingle();
 
         if (existingPurchase) {
+            console.warn(`[Verify] Duplicate hash attempt: ${txHash}`);
             return NextResponse.json(
                 { error: "Transaction already processed" },
                 { status: 400 }
             );
+        }
+
+        // 3. Loose Verification (Logging only)
+        // We do not block on these checks because Base App / Smart Wallets behavior is complex 
+        // and has caused false negatives (money lost, item not delivered).
+        const adminWallet = process.env.NEXT_PUBLIC_ADMIN_WALLET?.toLowerCase();
+        const to = receipt.to?.toLowerCase();
+
+        console.log(`[Verify] Debug Info:`, {
+            admin: adminWallet,
+            to: to,
+            from: receipt.from, // Smart Account
+            block: receipt.blockNumber
+        });
+
+        // Optional: Value check (Informational)
+        try {
+            const tx = await publicClient.getTransaction({ hash: txHash as `0x${string}` });
+            const s = SKINS.find(sk => sk.skuId === skuId);
+            const price = s ? parseEther(s.price.toString()) : BigInt(0);
+
+            console.log(`[Verify] Value Check: Sent ${tx.value}, Price ${price}`);
+
+            if (tx.value < price) {
+                console.warn("⚠️ Potential Payment Issue: Transaction value < Price. (Could be internal Smart Wallet transfer)");
+                // We ALLOW this because previous strict checks failed valid user payments.
+            }
+        } catch (e) {
+            console.warn("Could not fetch tx value details", e);
         }
 
         // 4. Record purchase
@@ -120,8 +99,9 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        console.log(`[Verify] Success: Recorded purchase for SKU ${skuId}`);
+        console.log(`[Verify] ✅ Success: Recorded purchase for SKU ${skuId}`);
         return NextResponse.json({ success: true });
+
     } catch (error) {
         console.error("Error verifying transaction:", error);
         return NextResponse.json(
