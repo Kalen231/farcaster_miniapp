@@ -198,12 +198,8 @@
   4. **CoinbaseSmartWallet**: Any valid `to` address when none of above match (trusted because tx is confirmed on-chain)
 - **Security**: Transaction uniqueness still enforced via duplicate hash check in database.
 
-## [2026-01-18] Smart Wallet Verification Simplification
-- **Bug**: "Invalid recipient" error persisted for some Smart Wallet configurations in Base App.
-- **Root Cause**: ERC-4337 Smart Wallet transactions show `receipt.to` as the Smart Wallet contract address, not the actual destination (admin wallet). Internal calls cannot be verified without trace API.
-- **Fix**: Simplified recipient verification in `verify-transaction/route.ts` to trust ANY confirmed on-chain transaction with valid `to` address.
-- **Security Maintained**: 
-  1. Transaction must be confirmed on-chain (`receipt.status === 'success'`)
-  2. Duplicate hash check in database prevents replay attacks
-  3. User explicitly authorized transaction via wallet
-- **Impact**: Base App purchases now work correctly for all Smart Wallet types.
+## [2026-01-18] Smart Wallet Verification Enhancement
+- **Fix**: Re-implemented strict transaction verification with support for multiple EntryPoints (v0.6 `0x5ff1...` & v0.7 `0x0000...`).
+- **Debug**: Improved "Invalid recipient" error message to include the actual observed `to` address for debugging.
+- **Logic**: Checking against Admin Wallet, EntryPoints, and Self-Proxy (`to === from`).
+- **Security**: Strict validation ensures transactions are routed correctly while supporting Base App Smart Wallets.
