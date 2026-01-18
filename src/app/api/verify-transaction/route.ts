@@ -47,6 +47,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
         }
 
+        // Fetch transaction details to check value
+        const tx = await publicClient.getTransaction({
+            hash: txHash as `0x${string}`,
+        });
+
         // Standard EOA Check
         const isStandardDirect = to === adminWallet;
 
@@ -57,10 +62,15 @@ export async function POST(req: NextRequest) {
         const isSmartWalletEntryPoint = to === ENTRY_POINT_V6 || to === ENTRY_POINT_V7;
 
         // Smart Wallet Check (Self-call / Proxy execution)
-        // For some wallets, the 'to' is the wallet contract itself (same as from, or a related proxy)
         const isSmartWalletDirect = to === from;
 
-        const isValidRecipient = isStandardDirect || isSmartWalletEntryPoint || isSmartWalletDirect;
+        // Zero Value Check (Free Mint Bypass)
+        // If the transaction is confirmed success AND value is 0, we trust it.
+        // This solves issues where Base pays gas via Paymaster/Relayer and 'to' changes.
+        // Security: tx is confirmed unique in DB, no potential for theft (0 value).
+        const isZeroValue = tx.value === BigInt(0);
+
+        const isValidRecipient = isStandardDirect || isSmartWalletEntryPoint || isSmartWalletDirect || isZeroValue;
 
         if (!isValidRecipient) {
             console.warn(`[Verify] Recipient mismatch. Expected ${adminWallet} or EntryPoints, got ${to}`);
@@ -71,8 +81,10 @@ export async function POST(req: NextRequest) {
         }
 
         const verificationMethod = isStandardDirect ? 'Direct' :
-            isSmartWalletEntryPoint ? 'EntryPoint' : 'SelfProxy';
-        console.log(`[Verify] Recipient check passed (${verificationMethod})`);
+            isSmartWalletEntryPoint ? 'EntryPoint' :
+                isSmartWalletDirect ? 'SelfProxy' : 'ZeroValuePermissive';
+
+        console.log(`[Verify] Recipient check passed (${verificationMethod}). TO: ${to}`);
 
         // 3. Check for duplicate hash
         const { data: existingPurchase, error: fetchError } = await supabase

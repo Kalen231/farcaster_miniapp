@@ -73,10 +73,10 @@ export default function MainMenu({
                                 <img
                                     src={playerAvatar}
                                     alt="Avatar"
-                                    className="w-8 h-8 rounded-full border-2 border-cyan-400/50 shadow-[0_0_8px_rgba(0,212,255,0.3)] object-cover"
+                                    className="w-10 h-10 rounded-full border-2 border-cyan-400 shadow-[0_0_12px_rgba(0,212,255,0.5)] object-cover"
                                 />
                             ) : (
-                                <div className="w-8 h-8 rounded-full border-2 border-cyan-400/50 bg-[#1E293B] flex items-center justify-center text-cyan-400">
+                                <div className="w-10 h-10 rounded-full border-2 border-cyan-400/50 bg-[#1E293B] flex items-center justify-center text-cyan-400">
                                     👤
                                 </div>
                             )}

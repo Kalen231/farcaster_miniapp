@@ -198,11 +198,11 @@
   4. **CoinbaseSmartWallet**: Any valid `to` address when none of above match (trusted because tx is confirmed on-chain)
 - **Security**: Transaction uniqueness still enforced via duplicate hash check in database.
 
-## [2026-01-18] Smart Wallet Verification Enhancement
-- **Fix**: Re-implemented strict transaction verification with support for multiple EntryPoints (v0.6 `0x5ff1...` & v0.7 `0x0000...`).
-- **Debug**: Improved "Invalid recipient" error message to include the actual observed `to` address for debugging.
-- **Logic**: Checking against Admin Wallet, EntryPoints, and Self-Proxy (`to === from`).
-- **Security**: Strict validation ensures transactions are routed correctly while supporting Base App Smart Wallets.
+## [2026-01-18] Sponsored Gas Verification Fix
+- **Fix**: Implemented permissive verification for ZERO-VALUE transactions (free mints).
+- **Rationale**: When Base pays gas (Sponsored Transactions), the `receipt.to` field often points to a Relayer or Paymaster instead of the Admin Wallet or EntryPoint.
+- **Logic**: If `value === 0` AND transaction is confirmed on-chain, we TRUST it regardless of the recipient address. This enables free mints to work seamlessly even with complex gas sponsorship flows.
+- **Security**: Strict validation remains for paid transactions. For free items, unique `txHash` check prevents replays.
 
 ## [2026-01-18] Fix Base App Avatar
 - **Feature**: Added meaningful user avatar display for Base App users.

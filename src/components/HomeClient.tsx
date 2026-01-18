@@ -123,8 +123,17 @@ export default function HomeClient() {
         <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-zinc-900">
             {/* Player Info */}
             {screen !== 'menu' && (
-                <div className="mb-4 text-white font-mono text-sm text-center flex flex-col gap-1">
-                    <div>Player: {displayName} (FID: {fid})</div>
+                <div className="mb-4 text-white font-mono text-sm text-center flex flex-col items-center gap-1">
+                    <div className="flex items-center gap-2">
+                        {pfpUrl && (
+                            <img
+                                src={pfpUrl}
+                                alt="Profile"
+                                className="w-5 h-5 rounded-full border border-cyan-500/50"
+                            />
+                        )}
+                        <span>Player: {displayName} (FID: {fid})</span>
+                    </div>
                     {(isSyncing || !hasInitialized) && <span className="text-xs text-gray-400">Syncing...</span>}
                 </div>
             )}
