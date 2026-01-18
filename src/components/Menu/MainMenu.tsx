@@ -82,7 +82,7 @@ export default function MainMenu({
                             )}
                             <p className="text-blue-100 font-mono text-sm">{playerName}</p>
                         </div>
-                        <p className="text-cyan-400 font-mono text-xs font-bold tracking-wider text-center">🏆 BEST: {highScore}</p>
+                        <p className="text-cyan-400 font-mono text-xs font-bold tracking-wider text-center">🏆 RECORD: {highScore}</p>
                     </div>
                 )}
 
