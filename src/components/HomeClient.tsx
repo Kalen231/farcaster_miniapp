@@ -16,7 +16,7 @@ import { useGameData } from "@/hooks/useGameData";
 import { GameScreen } from "@/types/game";
 
 export default function HomeClient() {
-    const { fid, displayName, pfpUrl, isLoading } = useFarcasterContext();
+    const { fid, displayName, pfpUrl, isLoading, isBaseApp } = useFarcasterContext();
 
     // Custom Hook for Game Data
     const {
@@ -103,7 +103,8 @@ export default function HomeClient() {
             });
 
             // If user completed the cast, unlock recast achievement
-            if (result?.cast) {
+            // In Base App, result.cast might be missing even on success
+            if (result?.cast || isBaseApp) {
                 unlockAchievement('recast_share');
             }
         } catch (err) {

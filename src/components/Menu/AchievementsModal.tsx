@@ -221,8 +221,8 @@ export default function AchievementsModal({
                 embeds: [baseUrl]
             });
 
-            if (result?.cast) {
-                // Instant verification if composeCast succeeds
+            if (result?.cast || isBaseApp) {
+                // Instant verification if composeCast succeeds OR if we are in Base App (where cast object might be missing)
                 onUnlockAchievement(achievementId);
             }
         } catch (err) {
