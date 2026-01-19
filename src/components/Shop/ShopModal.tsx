@@ -55,6 +55,14 @@ export default function ShopModal({
         // CRITICAL: Check for BOTH CONFIRMED status AND actual transactionHash
         const txHash = callsStatus?.receipts?.[0]?.transactionHash;
 
+        // Debug: Log full callsStatus structure for Smart Wallet debugging
+        if (callId && callsStatus) {
+            console.log('📊 callsStatus full structure:', JSON.stringify(callsStatus, null, 2));
+            console.log('📊 status:', callsStatus.status);
+            console.log('📊 receipts:', callsStatus.receipts);
+            console.log('📊 txHash extracted:', txHash);
+        }
+
         if (callId && callsStatus?.status === 'CONFIRMED' && txHash && buyingSkuId && !isVerifying) {
             console.log('✅ Base App Call Confirmed with hash:', txHash);
             verifyBaseAppPurchase(callId, buyingSkuId);
