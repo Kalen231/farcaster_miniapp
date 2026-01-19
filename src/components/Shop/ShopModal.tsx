@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
-import { useSendTransaction } from 'wagmi';
+import { useAccount, useSendTransaction } from 'wagmi';
 import { useSendCalls, useCallsStatus } from 'wagmi/experimental';
 import { waitForTransactionReceipt } from 'wagmi/actions';
 import { parseEther } from 'viem';
@@ -32,6 +32,7 @@ export default function ShopModal({
     const { sendCallsAsync } = useSendCalls();
 
     const { fid, isBaseApp } = useFarcasterContext();
+    const { address: userAddress } = useAccount();
     const adminWallet = process.env.NEXT_PUBLIC_ADMIN_WALLET || '0xf8d2b260F0c91ef80659acFAAA8a868C34dd4d71';
 
     // State for both flows
@@ -72,11 +73,9 @@ export default function ShopModal({
             console.log('✅ Base App Call Confirmed with hash:', txHash);
             verifyBaseAppPurchase(callId, buyingSkuId);
         } else if (callsStatus.status === 'CONFIRMED' && !txHash) {
-            // CONFIRMED but no hash - Smart Wallet fallback
-            // Use callId as identifier, backend will verify using it
-            console.log('⚠️ CONFIRMED but no transactionHash - using callId fallback');
-            console.log('📊 Verifying with callId:', callId);
-            verifyBaseAppPurchase(callId, buyingSkuId);
+            // CONFIRMED but no hash - Smart Wallet case
+            // DO NOT blind verify. Wait for hash or timeout.
+            console.warn('⚠️ CONFIRMED but no transactionHash found. Waiting for receipt update...');
         } else if (callsStatus.status === 'PENDING') {
             console.log('⏳ Base App Call Pending...');
         }
@@ -130,6 +129,7 @@ export default function ShopModal({
                     callId: id,
                     skuId,
                     isMintable,
+                    userAddress, // Pass user address for EntryPoint log verification
                 })
             });
 

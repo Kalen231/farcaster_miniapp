@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { SKINS } from '@/config/skins';
-import { createPublicClient, http, parseEther, decodeAbiParameters, Hex } from "viem";
+import { createPublicClient, http, parseEther, decodeAbiParameters, Hex, parseAbiItem, decodeEventLog } from "viem";
 import { base } from "viem/chains";
 
 const publicClient = createPublicClient({
@@ -96,21 +96,20 @@ function extractValueFromCalldata(input: Hex, adminWallet: string): bigint | nul
 
 export async function POST(req: NextRequest) {
     try {
-        const { fid, txHash, callId, skuId } = await req.json();
+        const { fid, txHash, callId, skuId, userAddress } = await req.json();
 
-        // Either txHash or callId is required (Smart Wallet fallback)
-        if (!fid || (!txHash && !callId) || !skuId) {
+        // txHash is strictly required. userAddress required for EntryPoint verification.
+        if (!fid || !txHash || !skuId) {
             return NextResponse.json(
                 { error: "Missing required fields" },
                 { status: 400 }
             );
         }
 
-        // Use txHash if available, otherwise use callId as identifier
-        const identifier = txHash || callId;
-        const isCallIdFallback = !txHash && callId;
+        const identifier = txHash;
+        const isCallIdFallback = false;
 
-        console.log(`[Verify] Checking: ${identifier} for FID: ${fid}, SKU: ${skuId}, isCallIdFallback: ${isCallIdFallback}`);
+        console.log(`[Verify] Checking: ${identifier} for FID: ${fid}, SKU: ${skuId}`);
 
         // 1. Verify transaction on-chain (skip if callId fallback - Smart Wallet trusted CONFIRMED)
         let receipt = null;
@@ -146,10 +145,6 @@ export async function POST(req: NextRequest) {
                     { status: 400 }
                 );
             }
-        } else {
-            // CallId fallback - Smart Wallet returned CONFIRMED status but no txHash
-            // We trust the CONFIRMED status from wallet_getCallsStatus
-            console.log('[Verify] Using callId fallback - trusting Smart Wallet CONFIRMED status');
         }
 
         // 2. Check for duplicate (using identifier - either txHash or callId)
@@ -177,26 +172,7 @@ export async function POST(req: NextRequest) {
 
         // 4. For callId fallback (Smart Wallet mobile), skip detailed value verification
         // We trust the CONFIRMED status from wallet_getCallsStatus
-        if (isCallIdFallback) {
-            console.log('[Verify] ✅ Smart Wallet callId fallback - trusting CONFIRMED status');
-            console.log('[Verify] Recording purchase for Smart Wallet transaction');
 
-            // Record purchase with callId as identifier
-            const { error: insertError } = await supabase.from("purchases").insert({
-                fid,
-                tx_hash: identifier,
-                sku_id: skuId,
-                amount: requiredPrice.toString(),
-            });
-
-            if (insertError) {
-                console.error("[Verify] DB Error:", insertError);
-                return NextResponse.json({ error: "Failed to record purchase" }, { status: 500 });
-            }
-
-            console.log(`[Verify] ✅ Smart Wallet Purchase recorded: FID=${fid}, SKU=${skuId}`);
-            return NextResponse.json({ success: true, purchaseId: identifier });
-        }
 
         // Normal flow - have txHash and receipt
         const tx = await publicClient.getTransaction({ hash: txHash as `0x${string}` });
@@ -218,8 +194,57 @@ export async function POST(req: NextRequest) {
             to === ENTRY_POINT_V07.toLowerCase();
 
         if (isEntryPointTx) {
-            console.log('[Verify] ✅ EntryPoint bundled transaction detected - trusting verified tx');
-            isVerifiedSmartWallet = true;
+            console.log('[Verify] EntryPoint bundled transaction detected. Verifying UserOperationEvent...');
+
+            if (userAddress) {
+                // Event: UserOperationEvent(bytes32 indexed userOpHash, address indexed sender, address indexed paymaster, uint256 nonce, bool success, uint256 actualGasCost, uint256 actualGasUsed)
+                const userOpEventAbi = parseAbiItem('event UserOperationEvent(bytes32 indexed userOpHash, address indexed sender, address indexed paymaster, uint256 nonce, bool success, uint256 actualGasCost, uint256 actualGasUsed)');
+
+                let foundUserOp = false;
+                let userOpSuccess = false;
+
+                for (const log of receipt!.logs) {
+                    try {
+                        const decodedLog = decodeEventLog({
+                            abi: [userOpEventAbi],
+                            data: log.data,
+                            topics: log.topics,
+                        });
+
+                        if (decodedLog.eventName === 'UserOperationEvent') {
+                            const sender = decodedLog.args.sender;
+                            const success = decodedLog.args.success;
+
+                            if (sender && sender.toLowerCase() === userAddress.toLowerCase()) {
+                                console.log('[Verify] Found UserOperationEvent for user:', userAddress, 'Success:', success);
+                                foundUserOp = true;
+                                if (success) {
+                                    userOpSuccess = true;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        // ignore non-matching logs
+                    }
+                }
+
+                if (!foundUserOp) {
+                    console.warn('[Verify] ⚠️ No UserOperationEvent found for user in this bundle.');
+                    // For now, if we can't find it, we FAIL.
+                    return NextResponse.json({ error: "Verification failed: User Operation not found in transaction logs" }, { status: 400 });
+                } else if (!userOpSuccess) {
+                    console.error('[Verify] ❌ UserOperationEvent found but Success = FALSE.');
+                    return NextResponse.json({ error: "Transaction execution failed (UserOp reverted)" }, { status: 400 });
+                } else {
+                    console.log('[Verify] ✅ UserOperationEvent verified success.');
+                    isVerifiedSmartWallet = true;
+                }
+            } else {
+                console.warn('[Verify] ⚠️ No userAddress provided for EntryPoint verification.');
+                // If no address provided, we can't verify execution success reliably in a bundle.
+                // We MUST return error to force client update.
+                return NextResponse.json({ error: "Verification failed: Client outdated (missing address)" }, { status: 400 });
+            }
         } else {
             const isPotentialSmartWallet = tx.value === BigInt(0) && tx.input && tx.input.length > 10 && to !== adminWallet.toLowerCase();
 

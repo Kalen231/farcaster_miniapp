@@ -11,6 +11,13 @@
   - **Fallback**: Если статус `CONFIRMED`, но hash нет (мобильный Smart Wallet) — используем `callId` для верификации
   - Backend теперь принимает `callId` вместо `txHash` в таких случаях и доверяет статусу кошелька
 
+## [2026-01-19] Security: Strict Verification for Smart Wallets
+- **Исправление**:
+  - Убран insecure fallback ("доверие статусу CONFIRMED"), который позволял проходить отмененным транзакциям.
+  - Добавлена проверка `UserOperationEvent` в логах EntryPoint.
+  - Теперь проверяем `success` флаг внутри логов, чтобы убедиться, что транзакция реально выполнилась (а не просто прошла валидацию).
+  - Frontend передает `userAddress` для точной проверки логов.
+
 ## [2026-01-19] Fix: Transaction Not Found / Timeout для Bundled AA
 > **Исправлена проблема индексации bundled AA транзакций**
 
