@@ -66,19 +66,19 @@ export default function ShopModal({
         }
     }, [callId, callsStatus?.status, callsStatus?.receipts, buyingSkuId]);
 
-    // Timeout for BaseApp transactions - reduced to 15 seconds since Base App is fast
+    // Timeout for BaseApp transactions - 30 seconds for bundled AA transactions
     useEffect(() => {
         if (!callId) return;
 
         const timeout = setTimeout(() => {
             const txHash = callsStatus?.receipts?.[0]?.transactionHash;
             if (callId && !txHash && buyingSkuId) {
-                console.error('❌ BaseApp transaction timeout - no hash received after 15s');
+                console.error('❌ BaseApp transaction timeout - no hash received after 30s');
                 setError('Transaction timeout. Please try again.');
                 setBuyingSkuId(null);
                 setCallId(null);
             }
-        }, 15000); // 15 seconds - Base App is fast
+        }, 30000); // 30 seconds - bundled AA txs may need more time
 
         return () => clearTimeout(timeout);
     }, [callId, callsStatus?.receipts, buyingSkuId]);

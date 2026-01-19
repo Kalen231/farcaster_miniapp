@@ -107,14 +107,31 @@ export async function POST(req: NextRequest) {
 
         console.log(`[Verify] Checking tx: ${txHash} for FID: ${fid}, SKU: ${skuId}`);
 
-        // 1. Verify transaction on-chain
+        // 1. Verify transaction on-chain with retry (bundled AA txs may need time to index)
         let receipt;
-        try {
-            receipt = await publicClient.getTransactionReceipt({
-                hash: txHash as `0x${string}`,
-            });
-        } catch (e) {
-            console.error("Failed to fetch receipt:", e);
+        const MAX_RETRIES = 5;
+        const RETRY_DELAY = 2000; // 2 seconds
+
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                receipt = await publicClient.getTransactionReceipt({
+                    hash: txHash as `0x${string}`,
+                });
+                console.log(`[Verify] Receipt found on attempt ${attempt}`);
+                break;
+            } catch (e) {
+                console.log(`[Verify] Attempt ${attempt}/${MAX_RETRIES} - Receipt not found, waiting...`);
+                if (attempt === MAX_RETRIES) {
+                    console.error("[Verify] Failed to fetch receipt after all retries:", e);
+                    return NextResponse.json({ error: "Transaction not found on chain. Please wait a moment and try refreshing." }, { status: 404 });
+                }
+                // Wait before retry
+                await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+            }
+        }
+
+        // Safety check - should never happen due to return in retry loop
+        if (!receipt) {
             return NextResponse.json({ error: "Transaction not found on chain" }, { status: 404 });
         }
 
