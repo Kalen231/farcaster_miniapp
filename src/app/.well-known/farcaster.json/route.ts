@@ -1,26 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
-    // Get host from request headers or env
-    const host = request.headers.get('host');
-    const isLocalhost = host?.includes('localhost');
+    // Get host from request headers
+    const host = request.headers.get('host') || '';
+    const isLocalhost = host.includes('localhost');
 
-    // URL Resolution priorities:
-    // 1. NEXT_PUBLIC_URL (set manually in Vercel or .env)
-    // 2. Fallback to current host with www prefix
-    let appUrl = process.env.NEXT_PUBLIC_URL || host || 'www.basebird.space';
+    // Check if www subdomain
+    const isWww = host.startsWith('www.');
 
-    // Ensure URL has proper protocol
-    if (!appUrl.startsWith('http://') && !appUrl.startsWith('https://')) {
-        appUrl = isLocalhost ? `http://${appUrl}` : `https://${appUrl}`;
-    }
+    // Account associations for both domains
+    const wwwAssociation = {
+        // Base App association (www.basebird.space) - FID: 1887687
+        "header": "eyJmaWQiOjE4ODc2ODcsInR5cGUiOiJhdXRoIiwia2V5IjoiMHgzMUI0NmU3ODdiM2UxYUE0Mjg2MjQyMTI5RmYwOTE4MjdjN2RDYmRiIn0",
+        "payload": "eyJkb21haW4iOiJ3d3cuYmFzZWJpcmQuc3BhY2UifQ",
+        "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEHo4JnLMwtov18y6u36YpV98ZGLjZPPDw-e6rxm3WEkbUP1QrYgml3Lk1Q35D5h7lDwGdjUkB1Zu8rjwebgHVKwGwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    };
+
+    const noWwwAssociation = {
+        // Farcaster association (basebird.space) - FID: 840807
+        "header": "eyJmaWQiOjg0MDgwNywidHlwZSI6ImF1dGgiLCJrZXkiOiIweGY4ZDJiMjYwRjBjOTFlZjgwNjU5YWNGQUFBOGE4NjhDMzRkZDRkNzEifQ",
+        "payload": "eyJkb21haW4iOiJiYXNlYmlyZC5zcGFjZSJ9",
+        "signature": "LlNeC3G+mmkBwzDkuO7KwpOUUdCyZFp2J90fp36g7jJxiPWutCw2Nx8SMhEQDYy9Q5o80+F2C7ZBeN2Nq/cLoRw="
+    };
+
+    // Select association based on domain
+    const accountAssociation = isWww ? wwwAssociation : noWwwAssociation;
+
+    // Build app URL
+    let appUrl = isLocalhost
+        ? `http://${host}`
+        : `https://${host || 'basebird.space'}`;
 
     const config = {
-        accountAssociation: {
-            "header": "eyJmaWQiOjE4ODc2ODcsInR5cGUiOiJhdXRoIiwia2V5IjoiMHgzMUI0NmU3ODdiM2UxYUE0Mjg2MjQyMTI5RmYwOTE4MjdjN2RDYmRiIn0",
-            "payload": "eyJkb21haW4iOiJ3d3cuYmFzZWJpcmQuc3BhY2UifQ",
-            "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEHo4JnLMwtov18y6u36YpV98ZGLjZPPDw-e6rxm3WEkbUP1QrYgml3Lk1Q35D5h7lDwGdjUkB1Zu8rjwebgHVKwGwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-        },
+        accountAssociation,
         miniapp: {
             version: "1",
             name: "Base Bird",
