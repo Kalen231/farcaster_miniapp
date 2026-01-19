@@ -30,6 +30,7 @@ export const metadata: Metadata = {
     description: "A Farcaster BaseBird Mini App",
     other: {
         "fc:miniapp": JSON.stringify(miniappEmbed),
+        "base:app_id": "696e512cc0ab25addaaaf612",
     },
 };
 
@@ -41,7 +42,7 @@ export default function RootLayout({
     return (
         <html lang="en">
             <head>
-                <meta name="base:app_id" content="696cba96f22fe462e74c1327" />
+                <meta name="base:app_id" content="696e512cc0ab25addaaaf612" />
                 {/* Early Farcaster context detection */}
                 <script src="/farcaster-init.js" />
             </head>
