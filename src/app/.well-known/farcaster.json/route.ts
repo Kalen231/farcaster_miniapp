@@ -16,9 +16,11 @@ export async function GET(request: NextRequest) {
     }
 
     const config = {
-        // NOTE: accountAssociation removed - regenerate it at:
-        // https://www.base.dev/preview?url=https://www.basebird.space&tab=account
-        // Then add the new association here with domain "www.basebird.space"
+        accountAssociation: {
+            "header": "eyJmaWQiOjE4ODc2ODcsInR5cGUiOiJhdXRoIiwia2V5IjoiMHgzMUI0NmU3ODdiM2UxYUE0Mjg2MjQyMTI5RmYwOTE4MjdjN2RDYmRiIn0",
+            "payload": "eyJkb21haW4iOiJ3d3cuYmFzZWJpcmQuc3BhY2UifQ",
+            "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEHo4JnLMwtov18y6u36YpV98ZGLjZPPDw-e6rxm3WEkbUP1QrYgml3Lk1Q35D5h7lDwGdjUkB1Zu8rjwebgHVKwGwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        },
         miniapp: {
             version: "1",
             name: "Base Bird",
