@@ -7,8 +7,8 @@ export async function GET(request: NextRequest) {
 
     // URL Resolution priorities:
     // 1. NEXT_PUBLIC_URL (set manually in Vercel or .env)
-    // 2. Fallback to current host
-    let appUrl = process.env.NEXT_PUBLIC_URL || host || 'basebird.space';
+    // 2. Fallback to current host with www prefix
+    let appUrl = process.env.NEXT_PUBLIC_URL || host || 'www.basebird.space';
 
     // Ensure URL has proper protocol
     if (!appUrl.startsWith('http://') && !appUrl.startsWith('https://')) {
@@ -16,11 +16,9 @@ export async function GET(request: NextRequest) {
     }
 
     const config = {
-        accountAssociation: {
-            "header": "eyJmaWQiOjg0MDgwNywidHlwZSI6ImF1dGgiLCJrZXkiOiIweGY4ZDJiMjYwRjBjOTFlZjgwNjU5YWNGQUFBOGE4NjhDMzRkZDRkNzEifQ",
-            "payload": "eyJkb21haW4iOiJiYXNlYmlyZC5zcGFjZSJ9",
-            "signature": "LlNeC3G+mmkBwzDkuO7KwpOUUdCyZFp2J90fp36g7jJxiPWutCw2Nx8SMhEQDYy9Q5o80+F2C7ZBeN2Nq/cLoRw="
-        },
+        // NOTE: accountAssociation removed - regenerate it at:
+        // https://www.base.dev/preview?url=https://www.basebird.space&tab=account
+        // Then add the new association here with domain "www.basebird.space"
         miniapp: {
             version: "1",
             name: "Base Bird",
