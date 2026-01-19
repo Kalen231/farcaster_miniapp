@@ -13,52 +13,86 @@ const publicClient = createPublicClient({
 const ENTRY_POINT_V06 = "0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789";
 const ENTRY_POINT_V07 = "0x0000000071727de22e5e9d8baf0edac6f37da032";
 
-// Smart Wallet execute() function selector
+// Smart Wallet function selectors
 const EXECUTE_SELECTOR = "0xb61d27f6"; // execute(address,uint256,bytes)
+const EXECUTE_BATCH_SELECTOR = "0x34fcd5be"; // executeBatch((address,uint256,bytes)[])
 
 /**
  * Extract value from Smart Wallet execute() calldata
  * Smart Wallets use execute(address dest, uint256 value, bytes data)
  */
-function extractValueFromExecuteCalldata(input: Hex, adminWallet: string): bigint | null {
+function extractValueFromCalldata(input: Hex, adminWallet: string): bigint | null {
     try {
-        // Check if this is an execute() call
-        if (!input.startsWith(EXECUTE_SELECTOR)) {
-            console.log('[Verify] Not an execute() call, selector:', input.slice(0, 10));
-            return null;
+        const selector = input.slice(0, 10);
+        console.log('[Verify] Calldata selector:', selector);
+
+        // Try execute(address,uint256,bytes)
+        if (selector === EXECUTE_SELECTOR) {
+            const params = input.slice(10) as Hex;
+            const [dest, value] = decodeAbiParameters(
+                [
+                    { name: 'dest', type: 'address' },
+                    { name: 'value', type: 'uint256' },
+                    { name: 'data', type: 'bytes' }
+                ],
+                `0x${params}`
+            );
+
+            console.log('[Verify] Decoded execute():', {
+                dest: dest,
+                value: value.toString(),
+                destMatchesAdmin: dest.toLowerCase() === adminWallet.toLowerCase()
+            });
+
+            if (dest.toLowerCase() === adminWallet.toLowerCase()) {
+                return value;
+            }
         }
 
-        // Decode execute(address, uint256, bytes) parameters
-        // Skip first 4 bytes (function selector)
-        const params = input.slice(10) as Hex;
+        // Try executeBatch((address,uint256,bytes)[])
+        // Coinbase Smart Wallet uses this format: executeBatch(Call[] calls)
+        // where Call = { target: address, value: uint256, data: bytes }
+        if (selector === EXECUTE_BATCH_SELECTOR) {
+            const params = input.slice(10) as Hex;
 
-        const [dest, value] = decodeAbiParameters(
-            [
-                { name: 'dest', type: 'address' },
-                { name: 'value', type: 'uint256' },
-                { name: 'data', type: 'bytes' }
-            ],
-            `0x${params}`
-        );
+            // Decode array of tuples
+            const [calls] = decodeAbiParameters(
+                [
+                    {
+                        name: 'calls',
+                        type: 'tuple[]',
+                        components: [
+                            { name: 'target', type: 'address' },
+                            { name: 'value', type: 'uint256' },
+                            { name: 'data', type: 'bytes' }
+                        ]
+                    }
+                ],
+                `0x${params}`
+            );
 
-        console.log('[Verify] Decoded execute():', {
-            dest: dest,
-            value: value.toString(),
-            destMatchesAdmin: dest.toLowerCase() === adminWallet.toLowerCase()
-        });
+            console.log('[Verify] Decoded executeBatch(), calls count:', (calls as any[]).length);
 
-        // Verify destination is our admin wallet
-        if (dest.toLowerCase() === adminWallet.toLowerCase()) {
-            return value;
+            // Find call to our admin wallet
+            for (const call of calls as { target: string; value: bigint; data: string }[]) {
+                console.log('[Verify] Batch call:', {
+                    target: call.target,
+                    value: call.value.toString()
+                });
+                if (call.target.toLowerCase() === adminWallet.toLowerCase()) {
+                    return call.value;
+                }
+            }
         }
 
-        console.log('[Verify] Destination does not match admin wallet');
+        console.log('[Verify] No matching call found for admin wallet');
         return null;
     } catch (e) {
-        console.log('[Verify] Failed to decode execute() calldata:', e);
+        console.log('[Verify] Failed to decode calldata:', e);
         return null;
     }
 }
+
 
 export async function POST(req: NextRequest) {
     try {
@@ -127,21 +161,30 @@ export async function POST(req: NextRequest) {
         // 4. Determine actual value transferred
         let actualValue = tx.value; // Default: top-level value
 
-        // Check if this is a Smart Wallet transaction (goes to EntryPoint)
-        const isSmartWalletTx = to === ENTRY_POINT_V06.toLowerCase() ||
+        // Check if this is a Smart Wallet transaction
+        // CRITICAL: Coinbase Smart Wallets DON'T always go to EntryPoint!
+        // They can also go to the user's Smart Wallet proxy contract directly.
+        // Detection: tx.value === 0 AND has calldata (input)
+        const isEntryPointTx = to === ENTRY_POINT_V06.toLowerCase() ||
             to === ENTRY_POINT_V07.toLowerCase();
 
-        if (isSmartWalletTx && tx.input) {
-            console.log('[Verify] Smart Wallet transaction detected, parsing calldata...');
+        // Smart Wallet = either EntryPoint OR (zero value + calldata + not direct to admin)
+        const isPotentialSmartWallet = isEntryPointTx ||
+            (tx.value === BigInt(0) && tx.input && tx.input.length > 10 && to !== adminWallet.toLowerCase());
+
+        if (isPotentialSmartWallet && tx.input) {
+            console.log('[Verify] Potential Smart Wallet transaction detected (EntryPoint or zero-value with calldata)');
+            console.log('[Verify] isEntryPointTx:', isEntryPointTx, 'to:', to);
 
             // Try to extract value from execute() calldata
-            const internalValue = extractValueFromExecuteCalldata(tx.input as Hex, adminWallet);
+            const internalValue = extractValueFromCalldata(tx.input as Hex, adminWallet);
 
             if (internalValue !== null) {
                 actualValue = internalValue;
-                console.log(`[Verify] Extracted internal value: ${actualValue}`);
+                console.log(`[Verify] ✅ Extracted internal value from calldata: ${actualValue}`);
             } else {
-                console.log('[Verify] Could not extract internal value, using tx.value');
+                // If we can't decode execute(), check internal transactions via trace
+                console.log('[Verify] Could not extract from execute() calldata, will check payment amount');
             }
         }
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026-01-19] 🚨 CRITICAL: Coinbase Smart Wallet Transaction Detection Fix
+> **Исправлена проблема: "Insufficient payment: sent 0" в Base App**
+
+- **Проблема**: В Base App деньги списывались, но приложение показывало ошибку "Insufficient payment: sent 0".
+- **Root Cause**: Coinbase Smart Wallet отправляет транзакции на **свой прокси-контракт**, а не на EntryPoint. Старая логика проверяла только EntryPoint адреса.
+- **Решение в `verify-transaction/route.ts`**:
+  - Расширена детекция Smart Wallet: теперь анализируем calldata для **ВСЕХ** транзакций где `tx.value === 0`
+  - Добавлена поддержка `executeBatch()` (selector: `0x34fcd5be`) помимо `execute()`
+  - `executeBatch` декодирует массив `Call[] = [{target, value, data}]` и ищет transfer к admin wallet
+- **Технические детали**:
+  - Новая функция `extractValueFromCalldata()` поддерживает оба формата
+  - `isPotentialSmartWallet = isEntryPointTx || (tx.value === 0 && hasCalldata)`
+  - Логируется selector для отладки
+
 ## [2026-01-19] 🚨 CRITICAL: Smart Wallet Calldata Value Parsing
 > **Исправлена уязвимость: бесплатные покупки через Smart Wallet**
 
