@@ -102,11 +102,9 @@ export default function HomeClient() {
                 embeds: [baseUrl]
             });
 
-            // If user completed the cast, unlock recast achievement
-            // In Base App, result.cast might be missing even on success
-            if (result?.cast || isBaseApp) {
-                unlockAchievement('recast_share');
-            }
+            // If user completed the cast (or dismissed the modal without error), unlock recast achievement
+            // We accept this loose verification to support Base App and other clients correctly
+            unlockAchievement('recast_share');
         } catch (err) {
             // Fallback to openUrl if composeCast fails
             const url = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${baseUrl}`;

@@ -221,10 +221,10 @@ export default function AchievementsModal({
                 embeds: [baseUrl]
             });
 
-            if (result?.cast || isBaseApp) {
-                // Instant verification if composeCast succeeds OR if we are in Base App (where cast object might be missing)
-                onUnlockAchievement(achievementId);
-            }
+            // Base App (and some other clients) may not return the cast object even on success.
+            // If composeCast resolves without error, we treat it as a success to ensure the user gets the reward.
+            // This prioritizes UX over strict verification (anti-cheat).
+            onUnlockAchievement(achievementId);
         } catch (err) {
             console.error("Compose cast failed, falling back to openUrl", err);
             const url = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${baseUrl}`;

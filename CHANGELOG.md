@@ -10,4 +10,6 @@
     - Updated `handleShare` with the same lenient check (`result?.cast || isBaseApp`).
     - Added `isBaseApp` to the `useFarcasterContext` destructuring.
 
-**Result**: Base App users should now receive the "Spreader" achievement and other rewards for sharing, correcting the discrepancy between Farcaster and Base App behavior.
+**Result**: Base App users should now receive the "Spreader" achievement and other rewards for sharing.
+
+- **Recast Verification Update**: Removed strict checks on `composeCast` result. Now grants reward immediately upon successful completion of the action (resolving promise).
