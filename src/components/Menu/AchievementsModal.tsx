@@ -40,12 +40,13 @@ export default function AchievementsModal({
     const [callId, setCallId] = useState<string | null>(null);
     const [isVerifying, setIsVerifying] = useState(false);
 
-    // Watch Base App calls
+    // Watch Base App calls - optimized for fast Base App transactions
     const { data: callsStatus } = useCallsStatus({
         id: callId || '',
         query: {
             enabled: !!callId,
-            refetchInterval: (data) => data.state.data?.status === 'CONFIRMED' ? false : 1000,
+            // CRITICAL: Fast polling (200ms) for instant Base App transactions
+            refetchInterval: (data) => data.state.data?.status === 'CONFIRMED' ? false : 200,
         }
     });
 
@@ -65,19 +66,19 @@ export default function AchievementsModal({
         }
     }, [callId, callsStatus?.status, callsStatus?.receipts, mintingId]);
 
-    // Timeout for BaseApp mint transactions - show error if no hash after 60 seconds
+    // Timeout for BaseApp mint transactions - reduced to 15 seconds since Base App is fast
     useEffect(() => {
         if (!callId) return;
 
         const timeout = setTimeout(() => {
             const txHash = callsStatus?.receipts?.[0]?.transactionHash;
             if (callId && !txHash && mintingId) {
-                console.error('❌ BaseApp mint timeout - no hash received after 60s');
-                setError('Mint failed: No confirmation from blockchain. Please try again.');
+                console.error('❌ BaseApp mint timeout - no hash received after 15s');
+                setError('Mint timeout. Please try again.');
                 setMintingId(null);
                 setCallId(null);
             }
-        }, 60000); // 60 seconds
+        }, 15000); // 15 seconds - Base App is fast
 
         return () => clearTimeout(timeout);
     }, [callId, callsStatus?.receipts, mintingId]);
