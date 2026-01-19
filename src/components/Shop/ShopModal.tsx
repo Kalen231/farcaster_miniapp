@@ -52,67 +52,82 @@ export default function ShopModal({
 
     // Effect to handle Base App validation when call confirms
     useEffect(() => {
-        // CRITICAL: Check for BOTH CONFIRMED status AND actual transactionHash
-        const txHash = callsStatus?.receipts?.[0]?.transactionHash;
+        if (!callId || !callsStatus || !buyingSkuId || isVerifying) return;
 
-        // Debug: Log full callsStatus structure for Smart Wallet debugging
-        if (callId && callsStatus) {
-            console.log('📊 callsStatus full structure:', JSON.stringify(callsStatus, null, 2));
-            console.log('📊 status:', callsStatus.status);
-            console.log('📊 receipts:', callsStatus.receipts);
-            console.log('📊 txHash extracted:', txHash);
+        // Try multiple ways to get the transaction hash (Smart Wallet compatibility)
+        let txHash = callsStatus?.receipts?.[0]?.transactionHash;
+
+        // Fallback: Some Smart Wallets return hash differently
+        if (!txHash && callsStatus?.receipts?.[0]) {
+            const receipt = callsStatus.receipts[0] as any;
+            txHash = receipt.hash || receipt.txHash || receipt.transactionHash;
         }
 
-        if (callId && callsStatus?.status === 'CONFIRMED' && txHash && buyingSkuId && !isVerifying) {
+        // Log status for debugging (safe, no JSON.stringify)
+        console.log('📊 callsStatus.status:', callsStatus.status);
+        console.log('📊 receipts count:', callsStatus.receipts?.length || 0);
+        console.log('📊 txHash found:', txHash || 'none');
+
+        if (callsStatus.status === 'CONFIRMED' && txHash) {
             console.log('✅ Base App Call Confirmed with hash:', txHash);
             verifyBaseAppPurchase(callId, buyingSkuId);
+        } else if (callsStatus.status === 'CONFIRMED' && !txHash) {
+            // CONFIRMED but no hash - Smart Wallet fallback
+            // Use callId as identifier, backend will verify using it
+            console.log('⚠️ CONFIRMED but no transactionHash - using callId fallback');
+            console.log('📊 Verifying with callId:', callId);
+            verifyBaseAppPurchase(callId, buyingSkuId);
+        } else if (callsStatus.status === 'PENDING') {
+            console.log('⏳ Base App Call Pending...');
         }
+    }, [callId, callsStatus?.status, callsStatus?.receipts, buyingSkuId, isVerifying]);
 
-        // Log PENDING status for debugging
-        if (callId && callsStatus?.status === 'PENDING') {
-            console.log('⏳ Base App Call Pending, waiting for blockchain confirmation...');
-        }
-    }, [callId, callsStatus?.status, callsStatus?.receipts, buyingSkuId]);
-
-    // Timeout for BaseApp transactions - 30 seconds for bundled AA transactions
+    // Timeout for BaseApp transactions - 45 seconds for Smart Wallet bundled AA
     useEffect(() => {
         if (!callId) return;
 
         const timeout = setTimeout(() => {
-            const txHash = callsStatus?.receipts?.[0]?.transactionHash;
+            // Try multiple hash sources before timing out
+            let txHash = callsStatus?.receipts?.[0]?.transactionHash;
+            if (!txHash && callsStatus?.receipts?.[0]) {
+                const receipt = callsStatus.receipts[0] as any;
+                txHash = receipt.hash || receipt.txHash;
+            }
+
             if (callId && !txHash && buyingSkuId) {
-                console.error('❌ BaseApp transaction timeout - no hash received after 30s');
+                console.error('❌ BaseApp transaction timeout - no hash received after 45s');
+                console.error('❌ Final callsStatus.status:', callsStatus?.status);
                 setError('Transaction timeout. Please try again.');
                 setBuyingSkuId(null);
                 setCallId(null);
             }
-        }, 30000); // 30 seconds - bundled AA txs may need more time
+        }, 45000); // 45 seconds - Smart Wallet may need more time
 
         return () => clearTimeout(timeout);
-    }, [callId, callsStatus?.receipts, buyingSkuId]);
+    }, [callId, callsStatus?.receipts, callsStatus?.status, buyingSkuId]);
 
     const verifyBaseAppPurchase = async (id: string, skuId: string) => {
         setIsVerifying(true);
         try {
-            // For Smart Wallets, the Receipt might be different, but we send the call ID (or finding the hash)
-            // Our backend likely expects a hash. 
-            // callsStatus.receipts[0].transactionHash is what we need.
-            const txHash = callsStatus?.receipts?.[0]?.transactionHash;
-
-            if (!txHash) {
-                console.warn("No hash found yet for call", id);
-                return; // Wait for receipt
+            // Try to get txHash, but proceed even without it (Smart Wallet fallback)
+            let txHash = callsStatus?.receipts?.[0]?.transactionHash;
+            if (!txHash && callsStatus?.receipts?.[0]) {
+                const receipt = callsStatus.receipts[0] as any;
+                txHash = receipt.hash || receipt.txHash;
             }
 
             const skin = SKINS.find(s => s.skuId === skuId);
             const isMintable = skin?.isMintable;
+
+            console.log('🔄 Verifying:', { txHash: txHash || 'using callId', callId: id, skuId });
 
             const response = await fetch('/api/verify-transaction', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     fid,
-                    txHash,
+                    txHash: txHash || null,
+                    callId: id,
                     skuId,
                     isMintable,
                 })

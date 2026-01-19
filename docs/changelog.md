@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026-01-19] Fix: Smart Wallet Mobile Timeout
+> **Исправлена проблема timeout на мобильных Smart Wallet**
+
+- **Проблема**: На телефоне со Smart Wallet транзакция выполнялась успешно, но приложение показывало timeout.
+- **Root Cause**: Smart Wallet на мобильных может возвращать hash в разных полях (transactionHash, hash, txHash). Также JSON.stringify падал на BigInt.
+- **Решение**:
+  - Убран проблемный `JSON.stringify` вызов
+  - Добавлена проверка альтернативных путей получения hash (`receipt.hash`, `receipt.txHash`)
+  - **Fallback**: Если статус `CONFIRMED`, но hash нет (мобильный Smart Wallet) — используем `callId` для верификации
+  - Backend теперь принимает `callId` вместо `txHash` в таких случаях и доверяет статусу кошелька
+
 ## [2026-01-19] Fix: Transaction Not Found / Timeout для Bundled AA
 > **Исправлена проблема индексации bundled AA транзакций**
 

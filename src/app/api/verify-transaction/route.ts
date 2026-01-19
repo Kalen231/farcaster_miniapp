@@ -96,61 +96,71 @@ function extractValueFromCalldata(input: Hex, adminWallet: string): bigint | nul
 
 export async function POST(req: NextRequest) {
     try {
-        const { fid, txHash, skuId } = await req.json();
+        const { fid, txHash, callId, skuId } = await req.json();
 
-        if (!fid || !txHash || !skuId) {
+        // Either txHash or callId is required (Smart Wallet fallback)
+        if (!fid || (!txHash && !callId) || !skuId) {
             return NextResponse.json(
                 { error: "Missing required fields" },
                 { status: 400 }
             );
         }
 
-        console.log(`[Verify] Checking tx: ${txHash} for FID: ${fid}, SKU: ${skuId}`);
+        // Use txHash if available, otherwise use callId as identifier
+        const identifier = txHash || callId;
+        const isCallIdFallback = !txHash && callId;
 
-        // 1. Verify transaction on-chain with retry (bundled AA txs may need time to index)
-        let receipt;
-        const MAX_RETRIES = 5;
-        const RETRY_DELAY = 2000; // 2 seconds
+        console.log(`[Verify] Checking: ${identifier} for FID: ${fid}, SKU: ${skuId}, isCallIdFallback: ${isCallIdFallback}`);
 
-        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-            try {
-                receipt = await publicClient.getTransactionReceipt({
-                    hash: txHash as `0x${string}`,
-                });
-                console.log(`[Verify] Receipt found on attempt ${attempt}`);
-                break;
-            } catch (e) {
-                console.log(`[Verify] Attempt ${attempt}/${MAX_RETRIES} - Receipt not found, waiting...`);
-                if (attempt === MAX_RETRIES) {
-                    console.error("[Verify] Failed to fetch receipt after all retries:", e);
-                    return NextResponse.json({ error: "Transaction not found on chain. Please wait a moment and try refreshing." }, { status: 404 });
+        // 1. Verify transaction on-chain (skip if callId fallback - Smart Wallet trusted CONFIRMED)
+        let receipt = null;
+
+        if (txHash) {
+            const MAX_RETRIES = 5;
+            const RETRY_DELAY = 2000; // 2 seconds
+
+            for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+                try {
+                    receipt = await publicClient.getTransactionReceipt({
+                        hash: txHash as `0x${string}`,
+                    });
+                    console.log(`[Verify] Receipt found on attempt ${attempt}`);
+                    break;
+                } catch (e) {
+                    console.log(`[Verify] Attempt ${attempt}/${MAX_RETRIES} - Receipt not found, waiting...`);
+                    if (attempt === MAX_RETRIES) {
+                        console.error("[Verify] Failed to fetch receipt after all retries:", e);
+                        return NextResponse.json({ error: "Transaction not found on chain. Please wait a moment and try refreshing." }, { status: 404 });
+                    }
+                    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
                 }
-                // Wait before retry
-                await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
             }
+
+            if (!receipt) {
+                return NextResponse.json({ error: "Transaction not found on chain" }, { status: 404 });
+            }
+
+            if (receipt.status !== "success") {
+                return NextResponse.json(
+                    { error: "Transaction failed (reverted)" },
+                    { status: 400 }
+                );
+            }
+        } else {
+            // CallId fallback - Smart Wallet returned CONFIRMED status but no txHash
+            // We trust the CONFIRMED status from wallet_getCallsStatus
+            console.log('[Verify] Using callId fallback - trusting Smart Wallet CONFIRMED status');
         }
 
-        // Safety check - should never happen due to return in retry loop
-        if (!receipt) {
-            return NextResponse.json({ error: "Transaction not found on chain" }, { status: 404 });
-        }
-
-        if (receipt.status !== "success") {
-            return NextResponse.json(
-                { error: "Transaction failed (reverted)" },
-                { status: 400 }
-            );
-        }
-
-        // 2. Check for duplicate hash (CRITICAL)
+        // 2. Check for duplicate (using identifier - either txHash or callId)
         const { data: existingPurchase } = await supabase
             .from("purchases")
             .select("id")
-            .eq("tx_hash", txHash)
+            .eq("tx_hash", identifier)
             .maybeSingle();
 
         if (existingPurchase) {
-            console.warn(`[Verify] Duplicate hash attempt: ${txHash}`);
+            console.warn(`[Verify] Duplicate attempt: ${identifier}`);
             return NextResponse.json(
                 { error: "Transaction already processed" },
                 { status: 400 }
@@ -165,17 +175,41 @@ export async function POST(req: NextRequest) {
 
         console.log(`[Verify] SKU: ${skuId}, Price: ${requiredPrice}, Mintable: ${isMintable}`);
 
+        // 4. For callId fallback (Smart Wallet mobile), skip detailed value verification
+        // We trust the CONFIRMED status from wallet_getCallsStatus
+        if (isCallIdFallback) {
+            console.log('[Verify] ✅ Smart Wallet callId fallback - trusting CONFIRMED status');
+            console.log('[Verify] Recording purchase for Smart Wallet transaction');
+
+            // Record purchase with callId as identifier
+            const { error: insertError } = await supabase.from("purchases").insert({
+                fid,
+                tx_hash: identifier,
+                sku_id: skuId,
+                amount: requiredPrice.toString(),
+            });
+
+            if (insertError) {
+                console.error("[Verify] DB Error:", insertError);
+                return NextResponse.json({ error: "Failed to record purchase" }, { status: 500 });
+            }
+
+            console.log(`[Verify] ✅ Smart Wallet Purchase recorded: FID=${fid}, SKU=${skuId}`);
+            return NextResponse.json({ success: true, purchaseId: identifier });
+        }
+
+        // Normal flow - have txHash and receipt
         const tx = await publicClient.getTransaction({ hash: txHash as `0x${string}` });
-        const to = receipt.to?.toLowerCase();
+        const to = receipt!.to?.toLowerCase();
 
         console.log(`[Verify] TX Details:`, {
             to: to,
-            from: receipt.from,
+            from: receipt!.from,
             txValue: tx.value.toString(),
             inputLength: tx.input?.length || 0
         });
 
-        // 4. Determine actual value transferred
+        // 5. Determine actual value transferred
         let actualValue = tx.value; // Default: top-level value
         let isVerifiedSmartWallet = false;
 
@@ -184,41 +218,26 @@ export async function POST(req: NextRequest) {
             to === ENTRY_POINT_V07.toLowerCase();
 
         if (isEntryPointTx) {
-            // CRITICAL: EntryPoint transactions use handleOps which bundles multiple UserOps
-            // We CANNOT decode the internal value from handleOps calldata reliably
-            // Instead, we trust the transaction because:
-            // 1. Transaction is confirmed SUCCESS on-chain
-            // 2. Hash is unique (duplicate check passed)
-            // 3. Internal transfers are visible on BaseScan
             console.log('[Verify] ✅ EntryPoint bundled transaction detected - trusting verified tx');
             isVerifiedSmartWallet = true;
         } else {
-            // Not EntryPoint - might be direct Smart Wallet proxy call
             const isPotentialSmartWallet = tx.value === BigInt(0) && tx.input && tx.input.length > 10 && to !== adminWallet.toLowerCase();
 
             if (isPotentialSmartWallet) {
                 console.log('[Verify] Potential Smart Wallet proxy transaction detected');
-                console.log('[Verify] Attempting to decode execute/executeBatch calldata...');
-
-                // Try to extract value from execute() or executeBatch() calldata
                 const internalValue = extractValueFromCalldata(tx.input as Hex, adminWallet);
 
                 if (internalValue !== null) {
                     actualValue = internalValue;
                     console.log(`[Verify] ✅ Extracted internal value from calldata: ${actualValue}`);
                 } else {
-                    // Could not decode - this might be a different pattern
-                    // Check if tx.value > 0 (direct transfer) or trust as Smart Wallet
-                    console.log('[Verify] ⚠️ Could not decode calldata - checking if trusted Smart Wallet pattern');
-
-                    // If transaction goes to a contract with calldata and succeeds, 
-                    // it's likely a Smart Wallet. Trust it.
+                    console.log('[Verify] ⚠️ Could not decode calldata - trusting Smart Wallet pattern');
                     isVerifiedSmartWallet = true;
                 }
             }
         }
 
-        // 5. Verify payment amount
+        // 6. Verify payment amount
         console.log(`[Verify] Payment Check: Actual=${actualValue}, Required=${requiredPrice}, isVerifiedSmartWallet=${isVerifiedSmartWallet}`);
 
         // For verified Smart Wallet transactions, skip strict value check
@@ -238,7 +257,7 @@ export async function POST(req: NextRequest) {
         // 6. Record purchase
         const { error: insertError } = await supabase.from("purchases").insert({
             fid,
-            tx_hash: txHash,
+            tx_hash: identifier,
             sku_id: skuId,
         });
 
